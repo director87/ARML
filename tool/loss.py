@@ -16,20 +16,10 @@ class SegmentationLosses(object):
         """Choices: ['ce' or 'focal']"""
         if mode == 'ce':
             return self.CrossEntropyLoss
-        elif mode == 'camce':
-            return self.CrossEntropyLoss
         elif mode =='mvce':
             return self.CrossEntropyLoss
         elif mode == 'focal':
             return self.FocalLoss
-        elif mode == 'sce':
-            return self.SCELoss
-        elif mode == 'oeem':
-            return self.oeem
-        elif mode == 'pus':
-            return self.pus
-        elif mode == 'urn':
-            return self.urn
         else:
             raise NotImplementedError
 
@@ -98,218 +88,9 @@ class SegmentationLosses(object):
             loss /= n
 
         return loss
-
-    def weight_loss(self, loss):
-        n = loss.shape[0]
-        loss = loss.view(n, -1)
-        loss_weight = F.softmax(loss.clone().detach(), dim=1) / torch.mean(
-            F.softmax(loss.clone().detach(), dim=1), dim=1, keepdim=True
-        )
-        loss = torch.sum(loss * loss_weight) / (n * loss.shape[1])
-        return loss
-
-    def reduce_loss(self, loss, reduction):
-        """Reduce loss as specified.
-
-        Args:
-            loss (Tensor): Elementwise loss tensor.
-            reduction (str): Options are "none", "mean" and "sum".
-
-        Return:
-            Tensor: Reduced loss tensor.
-        """
-        reduction_enum = F._Reduction.get_enum(reduction)
-        # none: 0, elementwise_mean:1, sum: 2
-        if reduction_enum == 0:
-            return loss
-        elif reduction_enum == 1:
-            return loss.mean()
-        elif reduction_enum == 2:
-            return loss.sum()
-
-    def weight_reduce_loss(self, loss, weight=None, reduction='mean', avg_factor=None):
-        """Apply element-wise weight and reduce loss.
-
-        Args:
-            loss (Tensor): Element-wise loss.
-            weight (Tensor): Element-wise weights.
-            reduction (str): Same as built-in losses of PyTorch.
-            avg_factor (float): Avarage factor when computing the mean of losses.
-
-        Returns:
-            Tensor: Processed loss values.
-        """
-        # if weight is specified, apply element-wise weight
-        if weight is not None:
-            assert weight.dim() == loss.dim()
-            if weight.dim() > 1:
-                assert weight.size(1) == 1 or weight.size(1) == loss.size(1)
-            loss = loss * weight
-
-        # if avg_factor is not specified, just reduce the loss
-        if avg_factor is None:
-            loss = self.reduce_loss(loss, reduction)
-        else:
-            # if reduction is mean, then average the loss by avg_factor
-            if reduction == 'mean':
-                loss = loss.sum() / avg_factor
-            # if reduction is 'none', then do nothing, otherwise raise an error
-            elif reduction != 'none':
-                raise ValueError('avg_factor can not be used with reduction="sum"')
-        return loss
-
-    def oeem(self, pred, label, weight=None, class_weight=None, reduction='mean', avg_factor=None, ignore_index=255):
-        loss = F.cross_entropy(pred, label.long(), weight=class_weight, reduction='none', ignore_index=ignore_index)
-
-        weight = torch.ones_like(loss)
-        metric = -loss.detach().reshape((loss.shape[0], loss.shape[1] * loss.shape[2]))
-        weight = F.softmax(metric, 1)  # sm(-L)
-        weight = weight / weight.mean(1).reshape((-1, 1))  # sm(-L)/mean(sm(-L))
-        weight = weight.reshape((loss.shape[0], loss.shape[1], loss.shape[2]))
-        sm_x = F.softmax(pred.detach().reshape((pred.shape[0], pred.shape[1], pred.shape[2], pred.shape[3])), 1)
-        max_x = torch.max(sm_x, dim=1, keepdim=False)
-        weight = torch.mul(weight, max_x[0])
-
-        # apply onss on images of multiple labels
-        for i in range(label.shape[0]):
-            tag = set(label[i].reshape(label.shape[1] * label.shape[2]).tolist()) - {255}
-            if len(tag) <= 1:
-                weight[i] = 1
-
-            # apply weights and reduction
-        if weight is not None:
-            weight = weight.float()
-        loss = self.weight_reduce_loss(
-            loss, weight=weight, reduction=reduction, avg_factor=avg_factor)
-
-        return loss
-
-    def pus(self, pred,
-            label,
-            weight=None,
-            class_weight=None,
-            reduction='mean',
-            avg_factor=None,
-            pus_type='clamp',
-            pus_beta=0.3,
-            pus_k=0.3,
-            ignore_index=255):
-        """The wrapper function for :func:`F.cross_entropy`"""
-        # class_weight is a manual rescaling weight given to each class.
-        # If given, has to be a Tensor of size C element-wise losses
-        loss = F.cross_entropy(
-            pred,
-            label.long(),
-            weight=class_weight,
-            reduction='none',
-            ignore_index=ignore_index)
-        # print(loss)
-
-        # Pretended Under-fitting Strategy
-        if pus_type != "" and loss.mean() < pus_beta:
-            if pus_type == 'pow':
-                loss = torch.pow(loss + 0.000000001, pus_k)
-            elif pus_type == 'clamp':
-                loss = torch.clamp(loss, 0, pus_k)
-            elif pus_type == 'ignore':
-                loss = loss * (loss <= pus_k).float()
-            else:
-                pass
-
-        # apply weights and do the reduction
-        if weight is not None:
-            weight = weight.float()
-        loss = self.weight_reduce_loss(
-            loss, weight=weight, reduction=reduction, avg_factor=avg_factor)
-
-        return loss
-
-    def urn(self, pred,
-            label,
-            gama,
-            weight=None,
-            class_weight=None,
-            reduction='mean',
-            avg_factor=None,
-            pus_type='clamp',
-            pus_beta=0.5,
-            pus_k=0.5,
-            weight_thresh=0.5,
-            ignore_index=255):
-        """The wrapper function for :func:`F.cross_entropy`"""
-
-
-
-        # class_weight is a manual rescaling weight given to each class.
-        # If given, has to be a Tensor of size C element-wise losses
-        loss = F.cross_entropy(
-            pred,
-            label.long(),
-            weight=class_weight,
-            reduction='none',
-            ignore_index=ignore_index)
-        smw_loss = self.weight_loss(loss)
-        # print(F.softmax(loss))
-        # loss_sm = F.softmax(loss)
-        # print(loss_sm)
-        # proc_pred = pred.mean(dim=1)
-        # diff = proc_pred - label
-        # print(diff)
-        max = torch.max(loss)
-        min = torch.min(loss)
-        # print(max.item(), min.item())
-        condition = loss > ((max.item() - min.item()) / 2)
-        # print(loss.mean())
-        # condition = loss > (loss.mean())
-        weight_mask = torch.where(condition.cuda(), loss, torch.tensor(0.0).cuda())
-        # weight_mask = diff
-        weight_mask = weight_mask.float() / 255
-        # print(weight_mask)
-        uncertain_mask = weight_mask >= weight_thresh
-        weight_mask[uncertain_mask == 1] = weight_thresh * gama
-        weight_mask[uncertain_mask == 0] = 1
-        # print(weight_mask.shape)
-
-
-        if weight_thresh >= 0:
-            loss = loss * weight_mask
-
-        # print(torch.max(loss).item(), torch.min(loss).item())
-        # print(loss.mean())
-
-        # Underfit Cheating
-        if pus_type != "" and loss.mean() < pus_beta:
-            if pus_type == 'pow':
-                loss = torch.pow(loss + 0.000000001, pus_k)
-            elif pus_type == 'clamp':
-                loss = torch.clamp(loss, 0, pus_k)
-            elif pus_type == 'ignore':
-                loss = loss * (loss <= pus_k).float()
-            elif pus_type == 'mix':
-                if loss.mean() < pus_k:
-                    # loss = loss * (loss <= pus_k).float()
-                    loss = torch.pow(loss + 0.000000001, pus_k)
-                elif pus_k < loss.mean() < pus_beta:
-                    loss = torch.clamp(loss, 0, pus_k)
-            else:
-                pass
-        # if loss.mean() > pus_beta:
-        #     loss = torch.pow(loss + 0.000000001, pus_k)
-
-        # apply weights and do the reduction
-        if weight is not None:
-            weight = weight.float()
-        loss = self.weight_reduce_loss(
-            loss, weight=weight, reduction=reduction, avg_factor=avg_factor)
-
-        return loss
+        
 
 class KDLoss(nn.Module):
-    """
-    Distilling the Knowledge in a Neural Network
-    https://arxiv.org/pdf/1503.02531.pdf
-    """
-
     def __init__(self, T):
         super(KDLoss, self).__init__()
         self.T = T
@@ -325,9 +106,6 @@ class KDLoss(nn.Module):
 
 
 class PKT(nn.Module):
-    """Probabilistic Knowledge Transfer for deep representation learning
-    Code from author: https://github.com/passalis/probabilistic_kt"""
-
     def __init__(self):
         super(PKT, self).__init__()
 
@@ -363,10 +141,9 @@ class PKT(nn.Module):
 
         return loss
 
-class HintLoss(nn.Module):
-    """Fitnets: hints for thin deep nets, ICLR 2015"""
+class PTLoss(nn.Module):
     def __init__(self):
-        super(HintLoss, self).__init__()
+        super(PTLoss, self).__init__()
         self.crit = nn.MSELoss()
 
     def forward(self, f_s, f_t):
@@ -376,9 +153,6 @@ class HintLoss(nn.Module):
 
 
 class Correlation(nn.Module):
-    """Similarity-preserving loss. My origianl own reimplementation
-    based on the paper before emailing the original authors."""
-
     def __init__(self):
         super(Correlation, self).__init__()
 
@@ -400,44 +174,34 @@ class Correlation(nn.Module):
         return loss
 
 
-class RKDLoss(nn.Module):
-    """Relational Knowledge Disitllation, CVPR2019"""
-
-    def __init__(self, w_d=30, w_a=0):
-        super(RKDLoss, self).__init__()
+class STLoss(nn.Module):
+    def __init__(self, w_d=30, w_a=60):
+        super(STLoss, self).__init__()
         self.w_d = w_d
         self.w_a = w_a
 
     def forward(self, f_s, f_t):
         student = f_s.view(f_s.shape[0], -1)
         teacher = f_t.view(f_t.shape[0], -1)
-
-        # RKD distance loss
+        # distance loss
         with torch.no_grad():
             t_d = self.pdist(teacher, squared=False)
             mean_td = t_d[t_d > 0].mean()
             t_d = t_d / mean_td
-
         d = self.pdist(student, squared=False)
         mean_d = d[d > 0].mean()
         d = d / mean_d
-
         loss_d = F.smooth_l1_loss(d, t_d)
-
-        # RKD Angle loss
+        # angle loss
         with torch.no_grad():
             td = (teacher.unsqueeze(0) - teacher.unsqueeze(1))
             norm_td = F.normalize(td, p=2, dim=2)
             t_angle = torch.bmm(norm_td, norm_td.transpose(1, 2)).view(-1)
-
         sd = (student.unsqueeze(0) - student.unsqueeze(1))
         norm_sd = F.normalize(sd, p=2, dim=2)
         s_angle = torch.bmm(norm_sd, norm_sd.transpose(1, 2)).view(-1)
-
         loss_a = F.smooth_l1_loss(s_angle, t_angle)
-
         loss = self.w_d * loss_d + self.w_a * loss_a
-
         return loss
 
     @staticmethod
@@ -445,14 +209,11 @@ class RKDLoss(nn.Module):
         e_square = e.pow(2).sum(dim=1)
         prod = e @ e.t()
         res = (e_square.unsqueeze(1) + e_square.unsqueeze(0) - 2 * prod).clamp(min=eps)
-
         if not squared:
             res = res.sqrt()
-
         res = res.clone()
         res[range(len(e)), range(len(e))] = 0
         return res
-
 
 
 if __name__ == "__main__":
