@@ -5,10 +5,8 @@ import numpy as np
 import argparse
 import importlib
 import random
-# from visdom import Visdom
+from visdom import Visdom
 import network.resnet38_cls
-
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -18,47 +16,7 @@ from torchvision import transforms
 from tool import pyutils, torchutils
 from tool.GenDataset import Stage1_TrainDataset
 from tool.infer_fun import infer
-from tool.loss import KDLoss, PKT
 cudnn.enabled = True
-
-# seed = 666
-# random.seed(seed)
-# np.random.seed(seed)
-# torch.manual_seed(seed)
-# torch.cuda.manual_seed(seed)
-# torch.cuda.manual_seed_all(seed)
-
-
-class HintLoss(nn.Module):
-    """Fitnets: hints for thin deep nets, ICLR 2015"""
-    def __init__(self):
-        super(HintLoss, self).__init__()
-        self.crit = nn.MSELoss()
-
-    def forward(self, f_s, f_t):
-        loss = self.crit(f_s, f_t)
-        return loss
-
-
-
-def compute_acc(pred_labels, gt_labels):
-    pred_correct_count = 0
-    for pred_label in pred_labels:
-        if pred_label in gt_labels:
-            pred_correct_count += 1
-    union = len(gt_labels) + len(pred_labels) - pred_correct_count
-    acc = round(pred_correct_count/union, 4)
-    return acc
-
-def adaptive_min_pooling_loss(x):
-    # This loss does not affect the highest performance, but change the optimial background score (alpha)
-    n,c,h,w = x.size()
-    k = h*w//4
-    x = torch.max(x, dim=1)[0]
-    y = torch.topk(x.view(n,-1), k=k, dim=-1, largest=False)[0]
-    y = F.relu(y, inplace=False)
-    loss = torch.sum(y)/(k*n)
-    return loss
 
 def train_phase(args):
     # viz = Visdom(env=args.env_name)
@@ -100,7 +58,6 @@ def train_phase(args):
             'avg_ep_EM',
             'avg_ep_acc')
     timer = pyutils.Timer("Session started: ")
-    # cp = network.resnet38_cls.Class_Predictor(4, 1).cuda()
     for ep in range(args.max_epoches):
         model.train()
         args.ep_index = ep
@@ -109,10 +66,7 @@ def train_phase(args):
         ep_acc = 0
         for iter, (filename, data, label) in enumerate(train_data_loader):
             img = data
-            # img2 = F.interpolate(img, scale_factor=0.5, mode='bilinear', align_corners=False)
-            # print(img, img2)
             label = label.cuda(non_blocking=True)
-            # print(label, label2)
             if ep > 1:
                 # enable_PDA = 1
                 enable_AMM = 1
@@ -124,24 +78,7 @@ def train_phase(args):
                 # enable_NAEA = 0
                 enable_MARS = 0
             x, feature, y, cam1 = model(img.cuda(), enable_PDA=0, enable_AMM=0, enable_NAEA=0, enable_MARS=enable_MARS)
-            # x, feature, y, cam1 = model(img.cuda(), enable_PDA=0, enable_AMM=0, enable_NAEA=0)
-            # x_pre = x
-            # if ep > 0:
-            #     x = 0.9 * x + 0.1 * x_pre
-
-            # x, feature, y = model(img.cuda(), enable_PDA=0, enable_AMM=1)
-            # cam1 = model.forward_cam(img.cuda())
-            # print(cam1)
-            # print(feature.shape)
-            # x2, feature2, y2, cam2 = model(img.cuda(), enable_PDA=0, enable_AMM=0, enable_NAEA=0, enable_MARS=0)
-            # x_pre2 = x2
-            # if ep > 0:
-            #     x2 = 0.9 * x2 + 0.1 * x_pre2
-            # cam2 = model.forward_cam(img.cuda())
-            # print(cam2)
             prob = y.cpu().data.numpy()
-            # prob2 = y2.cpu().data.numpy()
-            # prob = (prob + prob2) / 2
             gt = label.cpu().data.numpy()
             for num, one in enumerate(prob):
                 ep_count += 1
@@ -153,33 +90,7 @@ def train_phase(args):
                 ep_acc += acc
             avg_ep_EM = round(ep_EM/ep_count, 4)
             avg_ep_acc = round(ep_acc/ep_count, 4)
-            # print(label)
-            # print(x)
             loss_cls = F.multilabel_soft_margin_loss(x, label, reduction='none')
-            # loss_re, _ = cp(x, label)
-            # print(loss_cls)
-            # print(loss_cls.mean())
-            # condition = loss_cls > (torch.max(loss_cls) - torch.min(loss_cls)) / 2
-            # weight_mask = torch.where(condition.cuda(), loss_cls, torch.tensor(0.0).cuda())
-            # weight_mask = weight_mask.float() / 255
-            # # print(weight_mask)
-            # uncertain_mask = weight_mask >= 0.005
-            # weight_mask[uncertain_mask == 1] = 0.1
-            # weight_mask[uncertain_mask == 0] = 1
-            # loss_cls = loss_cls * weight_mask
-            # print(loss_cls)
-            # loss_cls2 = F.multilabel_soft_margin_loss(x2, label, reduction='none')
-            # loss_kd = KDLoss(T=30)(cam1, cam2)
-            # uncertain = torch.mean(torch.abs(cam1 - cam2))
-            # print(cam1, cam2)
-            # print(uncertain)
-            # weight = 1 - uncertain
-            # loss_ht = HintLoss()(loss_cls, loss_cls2)
-            # loss_pkt = PKT()(loss_cls, loss_cls2)
-            # loss_cps = torch.mean(torch.abs(cam1 - cam2))
-            # print(loss_cls.mean(), loss_cls2.mean(), loss_cps.mean())
-            # print(cams.shape)
-            # loss = 0.5*loss_cls.mean() +0.5*loss_cls2.mean() + 0.01 * loss_cps
             loss = loss_cls.mean()
             # print(loss)
             avg_meter.add({'loss':loss.item(),
@@ -201,9 +112,6 @@ def train_phase(args):
                       'lr: %.4f' % (optimizer.param_groups[0]['lr']), 
                       'Fin:%s' % (timer.str_est_finish()),
                       flush=True)
-                # viz.line([avg_meter.pop('loss')],[optimizer.global_step],win='loss',update='append',opts=dict(title='loss'))
-                # viz.line([avg_meter.pop('avg_ep_EM')],[optimizer.global_step],win='Acc_exact',update='append',opts=dict(title='Acc_exact'))
-                # viz.line([avg_meter.pop('avg_ep_acc')],[optimizer.global_step],win='Acc',update='append',opts=dict(title='Acc'))
         if model.gama > 0.65:
             model.gama = model.gama*0.98
         print('Gama of progressive dropout attention is: ',model.gama)
@@ -228,16 +136,16 @@ if __name__ == '__main__':
     parser.add_argument("--max_epoches", default=20, type=int)
     parser.add_argument("--network", default="network.resnet38_cls", type=str)
     parser.add_argument("--lr", default=0.01, type=float)
-    parser.add_argument("--num_workers", default=1, type=int)
+    parser.add_argument("--num_workers", default=0, type=int)
     parser.add_argument("--wt_dec", default=5e-4, type=float)
     parser.add_argument("--session_name", default="Stage 1", type=str)
     parser.add_argument("--env_name", default="PDA", type=str)
-    parser.add_argument("--model_name", default='res38d_cca_ar', type=str)
+    parser.add_argument("--model_name", default='res38d_arml', type=str)
     parser.add_argument("--n_class", default=4, type=int)
-    parser.add_argument("--weights", default='/root/autodl-tmp/project/WSSS-Second/init_weights/ilsvrc-cls_rna-a1_cls1000_ep-0001.params', type=str)
-    parser.add_argument("--trainroot", default='/root/autodl-tmp/project/WSSS-Second/datasets/BCSS-WSSS/train/', type=str)
-    parser.add_argument("--testroot", default='/root/autodl-tmp/project/WSSS-Second/datasets/BCSS-WSSS/test/', type=str)
-    parser.add_argument("--save_folder", default='/root/autodl-tmp/project/WSSS-Second/checkpoints/',  type=str)
+    parser.add_argument("--weights", default='init_weights/ilsvrc-cls_rna-a1_cls1000_ep-0001.params', type=str)
+    parser.add_argument("--trainroot", default='datasets/BCSS-WSSS/train/', type=str)
+    parser.add_argument("--testroot", default='datasets/BCSS-WSSS/test/', type=str)
+    parser.add_argument("--save_folder", default='checkpoints/',  type=str)
     parser.add_argument("--init_gama", default=1, type=float)
     parser.add_argument("--dataset", default='bcss', type=str)
     args = parser.parse_args()
