@@ -9,11 +9,11 @@ from tool.infer_fun import create_pseudo_mask
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--weights", default='/root/autodl-tmp/project/WSSS-Second/checkpoints/stage1_checkpoint_trained_on_bcss_res38d_cca_ar.pth', type=str)
-    parser.add_argument("--network", default="/root/autodl-tmp/project/WSSS-Second/network.resnet38_cls", type=str)
-    parser.add_argument("--dataroot", default="/root/autodl-tmp/project/WSSS-Second/datasets/BCSS-WSSS", type=str)
+    parser.add_argument("--weights", default='checkpoints/stage1_checkpoint_trained_on_bcss_res38d_arml.pth', type=str)
+    parser.add_argument("--network", default="network.resnet38_cls", type=str)
+    parser.add_argument("--dataroot", default="datasets/BCSS-WSSS", type=str)
     parser.add_argument("--dataset", default="bcss", type=str)
-    parser.add_argument("--num_workers", default=1, type=int)
+    parser.add_argument("--num_workers", default=0, type=int)
     parser.add_argument("--n_class", default=4, type=int)
 
     args = parser.parse_args()
@@ -40,20 +40,20 @@ if __name__ == '__main__':
     model.eval()
     model.cuda()
     #
-    # fm = 'b4_5'
-    # savepath = os.path.join(PMpath,'PM_'+'res38d_pda'+fm)
-    # if not os.path.exists(savepath):
-    #     os.mkdir(savepath)
-    # create_pseudo_mask(model, args.dataroot, fm, savepath, args.n_class, palette, args.dataset)
-    # ##
-    # fm = 'b5_2'
-    # savepath = os.path.join(PMpath,'PM_'+'res38d_pda'+fm)
-    # if not os.path.exists(savepath):
-    #     os.mkdir(savepath)
-    # create_pseudo_mask(model, args.dataroot, fm, savepath, args.n_class, palette, args.dataset)
+    fm = 'b4_5'
+    savepath = os.path.join(PMpath,'PM_'+'res38d_arml'+fm)
+    if not os.path.exists(savepath):
+        os.mkdir(savepath)
+    create_pseudo_mask(model, args.dataroot, fm, savepath, args.n_class, palette, args.dataset)
+    ##
+    fm = 'b5_2'
+    savepath = os.path.join(PMpath,'PM_'+'res38d_arml'+fm)
+    if not os.path.exists(savepath):
+        os.mkdir(savepath)
+    create_pseudo_mask(model, args.dataroot, fm, savepath, args.n_class, palette, args.dataset)
     #
     fm = 'bn7'
-    savepath = os.path.join(PMpath,'PM_'+'res38d_cca_ar'+fm)
+    savepath = os.path.join(PMpath,'PM_'+'res38d_arml'+fm)
     if not os.path.exists(savepath):
         os.mkdir(savepath)
     create_pseudo_mask(model, args.dataroot, fm, savepath, args.n_class, palette, args.dataset)
