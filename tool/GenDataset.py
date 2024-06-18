@@ -77,26 +77,15 @@ class Stage2_Dataset(Dataset):
 
         if self.split   == "train":
             self._image_dir     = os.path.join(self._base_dir, 'train/')
-            self._cat_dir       = os.path.join(self._base_dir, 'train_PM/PM_res38d_cca_arbn7/')
-            self._cat_dir_a     = os.path.join(self._base_dir, 'train_PM/PM_res38d_camb5_2')
-            self._cat_dir_b     = os.path.join(self._base_dir, 'train_PM/PM_res38d_camb4_5')
-            # self._image_dir = os.path.join(self._base_dir, 'train/')
-            # self._cat_dir = os.path.join(self._base_dir, 'train_PM/PM_FSbn7/')
-            # self._cat_dir_a = os.path.join(self._base_dir, 'train_PM/PM_FSb5_2')
-            # self._cat_dir_b = os.path.join(self._base_dir, 'train_PM/PM_FSb4_5')
-            # self._cat_dir = os.path.join(self._base_dir, 'train_PM/PM_bn7/')
-            # self._cat_dir_a = os.path.join(self._base_dir, 'train_PM/PM_b5_2')
-            # self._cat_dir_b = os.path.join(self._base_dir, 'train_PM/PM_b4_5')
+            self._cat_dir       = os.path.join(self._base_dir, 'train_PM/PM_res38d_armlbn7/')
+            self._cat_dir_a     = os.path.join(self._base_dir, 'train_PM/PM_res38d_armlb5_2')
+            self._cat_dir_b     = os.path.join(self._base_dir, 'train_PM/PM_res38d_armlb4_5')
         elif self.split == 'val':
             self._image_dir = os.path.join(self._base_dir, 'val/img/')
             self._cat_dir   = os.path.join(self._base_dir, 'val/mask/')
-            # self._image_dir = os.path.join(self._base_dir, 'val_FS/img/')
-            # self._cat_dir = os.path.join(self._base_dir, 'val_FS/mask/')
         elif self.split == 'test':
             self._image_dir = os.path.join(self._base_dir, 'test/img/')
             self._cat_dir   = os.path.join(self._base_dir, 'test/mask/')
-            # self._image_dir = os.path.join(self._base_dir, 'test_WSI/img/')
-            # self._cat_dir = os.path.join(self._base_dir, 'test_WSI/mask/')
         self.args = args
         self.filenames = [os.path.splitext(file)[0] for file in os.listdir(self._image_dir) if not file.startswith('.')]
         self.images = [os.path.join(self._image_dir, fn + '.png') for fn in self.filenames]
