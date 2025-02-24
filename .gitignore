@@ -4,6 +4,8 @@ mxnet.zip
 environment_full.yml
 environment.yml
 init_weights/*
+slurm_out/*
+
 
 
 # Byte-compiled / optimized / DLL files
