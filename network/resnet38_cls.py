@@ -152,7 +152,7 @@ class Net_CAM(network.resnet38d.Net):
                         groups[1].append(m.bias)
 
         return groups
-            acc += (logit.argmax(dim=1) == label.view(-1)).sum().float()
-            num += label.size(0)
+        #     acc += (logit.argmax(dim=1) == label.view(-1)).sum().float()
+        #     num += label.size(0)
 
-        return loss / batch_size, acc / num
+        # return loss / batch_size, acc / num
