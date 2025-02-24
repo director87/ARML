@@ -5,7 +5,6 @@ import pdb
 
 import torch.nn.functional as F
 from tool.amm import AMM
-from tool.MARS import MARS
 
 
 class DeformConv2d(nn.Module):
