@@ -16,6 +16,7 @@ from torchvision import transforms
 from tool import pyutils, torchutils
 from tool.GenDataset import Stage1_TrainDataset
 from tool.infer_fun import infer
+from tool.infer_utils import compute_acc
 cudnn.enabled = True
 
 def train_phase(args):
